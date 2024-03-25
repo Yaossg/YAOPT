@@ -11,7 +11,6 @@ struct LineTokenizer {
     Source& context;
     const char *const o, *p, *q, *const r;
     const size_t line;
-    bool backslash = false;
 
     LineTokenizer(Source& context,
                   std::string_view view):
@@ -56,7 +55,6 @@ struct LineTokenizer {
     void add(TokenType type);
     [[noreturn]] void raise(const char* msg) const;
     void tokenize();
-    void addLinebreak(bool semicolon);
     void addId();
     void addPunct();
     void scanDigits(bool pred(char) noexcept);

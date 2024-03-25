@@ -25,9 +25,7 @@ enum class TokenType {
     OP_COLON,
 
     INTEGER,
-    FLOATING_POINT,
-
-    LINEBREAK
+    FLOATING_POINT
 };
 
 const std::unordered_map<std::string_view, TokenType> PUNCTUATIONS {
@@ -37,7 +35,6 @@ const std::unordered_map<std::string_view, TokenType> PUNCTUATIONS {
     {".", TokenType::OP_DOT},
     {",", TokenType::OP_COMMA},
     {":", TokenType::OP_COLON},
-    {";", TokenType::LINEBREAK},
     {"(", TokenType::LPAREN},
     {")", TokenType::RPAREN},
     {"[", TokenType::LBRACKET},

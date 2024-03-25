@@ -8,24 +8,38 @@
 
 namespace YAOPT {
 
+struct LineParser;
+
 struct Parser {
     Source source;
     std::string input;
     std::vector<std::unique_ptr<Entity>> entities;
 
-    std::vector<Token>::const_iterator p;
-    std::vector<Token>::const_iterator q;
 
-    explicit Parser(std::string input): input(std::move(input)) {}
+    explicit Parser(std::string input) : input(std::move(input)) {}
 
     void tokenize() {
         auto lines = splitLines(this->input);
-        for (auto line : lines) {
+        for (auto line: lines) {
             source.append(std::string(line));
         }
-        p = source.tokens.begin();
-        q = source.tokens.end();
     }
+
+    void parse();
+
+    using iterator = std::vector<std::vector<Token>>::iterator;
+
+    iterator parseDeclare(iterator it);
+    iterator parseDefine(iterator it);
+    iterator parseGlobalVariable(iterator it);
+};
+
+struct LineParser {
+    Source& source;
+    std::vector<Token>::const_iterator p;
+    std::vector<Token>::const_iterator q;
+
+    LineParser(Source& source, std::vector<Token>& tokens): source(source), p(tokens.begin()), q(tokens.end()) {}
 
     Token next() {
         if (p != q) {
@@ -53,15 +67,11 @@ struct Parser {
         return token;
     }
 
-    void parse();
+    std::unique_ptr<FunctionDeclare> parseDeclare();
+    std::unique_ptr<FunctionDefine> parseDefine();
+    std::unique_ptr<GlobalVariable> parseGlobalVariable();
 
-    void parseDeclare();
-    void parseDefine();
-    void parseGlobalVariable();
-    std::unique_ptr<Inst> parseInst(std::vector<Token> const& tokens) const;
-    Operand parseOperand(std::vector<Token> const& tokens, size_t index) const;
-
-    void parseType();
+    std::unique_ptr<Inst> parseInst();
 
 
 };

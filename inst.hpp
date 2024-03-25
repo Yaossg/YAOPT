@@ -17,28 +17,6 @@ enum class Type {
     VOID, I1, I64, DOUBLE, PTR, LABEL
 };
 
-struct Operand {
-    Type type;
-    std::string param;
-
-    [[nodiscard]] bool is_void() const {
-        return type == Type::VOID;
-    }
-
-    [[nodiscard]] bool is_reg() const {
-        return param.starts_with("%");
-    }
-
-    [[nodiscard]] bool is_imm() const {
-        return !is_reg();
-    }
-
-    [[nodiscard]] std::string label() const {
-        assert(type == Type::LABEL && is_reg());
-        return param.substr(1);
-    }
-};
-
 struct Inst : Descriptor {
     std::string code;
 
@@ -99,23 +77,26 @@ struct TerminatorInst : Inst {
 };
 
 struct RetInst : TerminatorInst {
-    Operand operand;
+    Type type;
+    std::string value;
     [[nodiscard]] std::string transition(const std::string& from) const override {
         return from + "-->EXIT";
     }
 };
 
 struct BrLabelInst : TerminatorInst {
-    Operand label;
+    std::string label;
     [[nodiscard]] std::string transition(const std::string& from) const override {
-        return from + "-->" + label.label();
+        return from + "-->" + label;
     }
 };
 
 struct BrCondInst : TerminatorInst {
-    Operand cond, label1, label2;
+    Type type = Type::I1;
+    std::string cond;
+    std::string label1, label2;
     [[nodiscard]] std::string transition(const std::string& from) const override {
-        return from + "-->" + label1.label() + "\n" + from + "-->" + label2.label();
+        return from + "-->" + label1 + "\n" + from + "-->" + label2;
     }
 };
 

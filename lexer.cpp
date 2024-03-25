@@ -29,12 +29,9 @@ void LineTokenizer::raise(const char *msg) const {
 }
 
 void LineTokenizer::tokenize() {
+    context.tokens.emplace_back();
     while (remains()) {
         switch (char ch = getc()) {
-            case '\\':
-                if (backslash) raise("multiple backslash in one line");
-                backslash = true;
-                break;
             case '#':
                 q = r;
                 break;
@@ -45,9 +42,6 @@ void LineTokenizer::tokenize() {
                 break;
             case '"':
                 addId();
-                break;
-            case ';':
-                addLinebreak(true);
                 break;
             default: {
                 ungetc(ch);
@@ -62,20 +56,10 @@ void LineTokenizer::tokenize() {
         }
         step();
     }
-    if (!backslash)
-        addLinebreak(false);
+    if (context.tokens.back().empty())
+        context.tokens.pop_back();
 }
 
-void LineTokenizer::addLinebreak(bool semicolon) {
-    if (context.tokens.empty() || context.tokens.back().type == TokenType::LINEBREAK) {
-        return;
-    }
-    if (!context.greedy.empty() && context.greedy.back().type != TokenType::LBRACE) {
-        if (semicolon) raise("semicolon is not allowed here");
-        return;
-    }
-    add(TokenType::LINEBREAK);
-}
 
 void LineTokenizer::addId() {
     std::string_view remains{p, r};
@@ -144,14 +128,13 @@ void LineTokenizer::addNumber() {
 }
 
 void LineTokenizer::add(TokenType type) {
-    if (backslash) raise("no token is allowed after backslash in one line");
-    context.tokens.push_back(make(type));
+    context.tokens.back().push_back(make(type));
     step();
     switch (type) {
         case TokenType::LPAREN:
         case TokenType::LBRACKET:
         case TokenType::LBRACE:
-            context.greedy.push_back(context.tokens.back());
+            context.greedy.push_back(context.tokens.back().back());
             break;
         case TokenType::RPAREN:
             checkGreedy("(", ")", TokenType::LPAREN);
@@ -168,13 +151,13 @@ void LineTokenizer::add(TokenType type) {
 void LineTokenizer::checkGreedy(const char* left, const char* right, TokenType match) {
     if (context.greedy.empty()) {
         Error().with(
-                ErrorMessage().error(context.tokens.back())
+                ErrorMessage().error(context.tokens.back().back())
                 .text("stray").quote(right).text("without").quote(left).text("to match")
                 ).raise();
     }
     if (context.greedy.back().type != match) {
         Error error;
-        error.with(ErrorMessage().error(context.tokens.back()).quote(right).text("mismatch"));
+        error.with(ErrorMessage().error(context.tokens.back().back()).quote(right).text("mismatch"));
         error.with(ErrorMessage().note(context.greedy.back()).quote(left).text("expected here"));
         for (auto it = context.greedy.rbegin(); it != context.greedy.rend(); ++it) {
             if (it->type == match) {
