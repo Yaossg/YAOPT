@@ -51,12 +51,12 @@ auto Parser::parseDefine(iterator it) -> iterator {
 }
 
 auto Parser::parseDeclare(iterator it) -> iterator {
-    //entities.push_back(LineParser{source, *it}.parseDeclare());
+    entities.push_back(LineParser{source, *it}.parseDeclare());
     return ++it;
 }
 
 auto Parser::parseGlobalVariable(iterator it) -> iterator {
-    //entities.push_back(LineParser{source, *it}.parseGlobalVariable());
+    entities.push_back(LineParser{source, *it}.parseGlobalVariable());
     return ++it;
 }
 
@@ -74,7 +74,7 @@ Type parseType(std::string_view type) {
 
 std::unique_ptr<Inst> LineParser::parseInst() {
     assert(remains());
-    auto inst = source.of(next());
+    auto inst = nextView();
     if (remains() && peek().type == TokenType::OP_COLON) {
         next();
         assert(!remains());
@@ -85,36 +85,146 @@ std::unique_ptr<Inst> LineParser::parseInst() {
         next();
         receiver = inst;
         assert(remains());
-        inst = source.of(next());
+        inst = nextView();
     }
-    if (inst == "unreachable") {
+    auto OPCODES_it = OPCODES.find(inst);
+    assert(OPCODES_it != OPCODES.end());
+    auto opcode = OPCODES_it->second;
+    if (opcode == Opcode::UNREACHABLE) {
         return std::make_unique<UnreachableInst>();
-    } else if (inst == "br") {
-        auto head = source.of(next());
+    } else if (opcode == Opcode::BR) {
+        auto head = nextView();
         if (head == "label") {
             auto br = std::make_unique<BrLabelInst>();
-            br->label = source.of(next()).substr(1);
+            br->label = nextView().substr(1);
             return br;
-        } else {
+        } else if (head == "i1") {
             auto br = std::make_unique<BrCondInst>();
-            // br i1 %cond, label %L1, label %L2
-            br->cond = source.of(next());
+            br->cond = nextView();
             expect(TokenType::OP_COMMA, "comma");
             next();
-            br->label1 = source.of(next()).substr(1);
+            br->label1 = nextView().substr(1);
             expect(TokenType::OP_COMMA, "comma");
             next();
-            br->label2 = source.of(next()).substr(1);
+            br->label2 = nextView().substr(1);
             return br;
         }
-    } else if (inst == "ret") {
+        assert(false);
+    } else if (opcode == Opcode::RET) {
         auto ret = std::make_unique<RetInst>();
-        ret->type = parseType(source.of(next()));
-        if (ret->type != Type::VOID) ret->value = source.of(next());
+        ret->type = parseType(nextView());
+        if (ret->type != Type::VOID) ret->value = nextView();
         return ret;
-    } else {
-        return std::make_unique<IntermediateInst>();
     }
+    std::unique_ptr<IntermediateInst> ret;
+    switch (opcode) {
+        case Opcode::FNEG:
+            assert(nextView() == "double");
+            ret = std::make_unique<UnaryOpInst>(nextView());
+            break;
+        case Opcode::ADD:
+        case Opcode::FADD:
+        case Opcode::SUB:
+        case Opcode::FSUB:
+        case Opcode::MUL:
+        case Opcode::FMUL:
+        case Opcode::UDIV:
+        case Opcode::SDIV:
+        case Opcode::FDIV:
+        case Opcode::UREM:
+        case Opcode::SREM:
+        case Opcode::FREM:
+        case Opcode::SHL:
+        case Opcode::LSHR:
+        case Opcode::ASHR:
+        case Opcode::AND:
+        case Opcode::OR:
+        case Opcode::XOR: {
+            auto type = parseType(nextView());
+            auto value1 = nextView();
+            expect(TokenType::OP_COMMA, "comma");
+            auto value2 = nextView();
+            ret = std::make_unique<BinaryOpInst>(opcode, type, value1, value2);
+            break;
+        }
+        case Opcode::ALLOCA:
+            ret = std::make_unique<AllocaInst>(parseType(nextView()));
+            break;
+        case Opcode::LOAD: {
+            auto type = parseType(nextView());
+            expect(TokenType::OP_COMMA, "comma");
+            assert(nextView() == "ptr");
+            auto from = nextView();
+            ret = std::make_unique<LoadInst>(type, from);
+            break;
+        }
+        case Opcode::STORE: {
+            auto type = parseType(nextView());
+            auto from = nextView();
+            expect(TokenType::OP_COMMA, "comma");
+            assert(nextView() == "ptr");
+            auto into = nextView();
+            ret = std::make_unique<StoreInst>(type, from, into);
+            break;
+        }
+        case Opcode::GETELEMENTPTR: {
+            assert(nextView() == "inbounds");
+            auto type = parseType(nextView());
+            expect(TokenType::OP_COMMA, "comma");
+            assert(nextView() == "ptr");
+            auto ptr = nextView();
+            expect(TokenType::OP_COMMA, "comma");
+            assert(nextView() == "i64");
+            auto offset = nextView();
+            ret = std::make_unique<GEPInst>(type, ptr, offset);
+            break;
+        }
+        case Opcode::ICMP: {
+            auto op = IcmpInst::OPS.at(nextView());
+            auto type = parseType(nextView());
+            auto value1 = nextView();
+            expect(TokenType::OP_COMMA, "comma");
+            auto value2 = nextView();
+            ret = std::make_unique<IcmpInst>(type, value1, value2, op);
+            break;
+        }
+        case Opcode::FCMP: {
+            auto op = FcmpInst::OPS.at(nextView());
+            auto type = parseType(nextView());
+            auto value1 = nextView();
+            expect(TokenType::OP_COMMA, "comma");
+            auto value2 = nextView();
+            ret = std::make_unique<FcmpInst>(type, value1, value2, op);
+            break;
+        }
+        case Opcode::SITOFP:
+        case Opcode::FPTOSI:
+        case Opcode::INTTOPTR:
+        case Opcode::PTRTOINT: {
+            auto type1 = parseType(nextView());
+            auto value = nextView();
+            assert(nextView() == "to");
+            auto type2 = parseType(nextView());
+            ret = std::make_unique<ConvInst>(opcode, type1, type2, value);
+            break;
+        }
+        case Opcode::CALL: {
+            auto ret_type = parseType(nextView());
+            auto function = nextView();
+            std::vector<CallInst::TypedValue> args;
+            expect(TokenType::LPAREN, "(");
+            while (peek().type != TokenType::RPAREN) {
+                if (!args.empty()) expect(TokenType::OP_COMMA, "comma");
+                auto type = parseType(nextView());
+                auto value = nextView();
+                args.push_back({type, value});
+            }
+            ret = std::make_unique<CallInst>(ret_type, function, std::move(args));
+            break;
+        }
+    }
+    ret->receiver = receiver;
+    return ret;
 }
 
 std::unique_ptr<FunctionDefine> LineParser::parseDefine() {
@@ -127,11 +237,19 @@ std::unique_ptr<FunctionDefine> LineParser::parseDefine() {
 }
 
 std::unique_ptr<FunctionDeclare> LineParser::parseDeclare() {
-    return std::unique_ptr<FunctionDeclare>();
+    next(); // define
+    next(); // return type
+    std::string name(source.of(expect(TokenType::IDENTIFIER, "identifier")));
+    auto declare = std::make_unique<FunctionDeclare>();
+    declare->name = std::move(name);
+    return declare;
 }
 
 std::unique_ptr<GlobalVariable> LineParser::parseGlobalVariable() {
-    return std::unique_ptr<GlobalVariable>();
+    std::string name(source.of(expect(TokenType::IDENTIFIER, "identifier")));
+    auto gv = std::make_unique<GlobalVariable>();
+    gv->name = std::move(name);
+    return gv;
 }
 
 }

@@ -58,6 +58,10 @@ struct LineParser {
         return p != q;
     }
 
+    std::string_view nextView() noexcept {
+        return source.of(next());
+    }
+
 
     Token expect(TokenType type, const char* msg) {
         auto token = next();

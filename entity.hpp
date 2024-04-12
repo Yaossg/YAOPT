@@ -14,11 +14,23 @@ struct Entity : Descriptor {
 };
 
 struct GlobalVariable : Entity {
-
+    [[nodiscard]] std::string serialize() const override {
+        std::string buf;
+        buf += "## ";
+        buf += name;
+        buf += '\n';
+        return buf;
+    }
 };
 
 struct FunctionDeclare : Entity {
-
+    [[nodiscard]] std::string serialize() const override {
+        std::string buf;
+        buf += "## ";
+        buf += name;
+        buf += '\n';
+        return buf;
+    }
 };
 
 struct BasicBlock : Descriptor {
