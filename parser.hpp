@@ -29,9 +29,21 @@ struct Parser {
 
     using iterator = std::vector<std::vector<Token>>::iterator;
 
-    iterator parseDeclare(iterator it);
-    iterator parseDefine(iterator it);
-    iterator parseGlobalVariable(iterator it);
+    void parseDeclare();
+    void parseDefine();
+    void parseGlobalVariable();
+
+    iterator _it;
+
+    [[nodiscard]] std::vector<Token>& peekLine() const {
+        return *_it;
+    }
+    std::vector<Token>& nextLine() {
+        return *_it++;
+    }
+    bool remains() {
+        return _it != source.tokens.end();
+    }
 };
 
 struct LineParser {

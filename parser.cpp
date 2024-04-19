@@ -6,36 +6,36 @@
 namespace YAOPT {
 
 void Parser::parse() {
-    for (auto it = source.tokens.begin(); it != source.tokens.end(); ) {
-        assert(!it->empty());
-        auto id = source.of(it->front());
+    _it = source.tokens.begin();
+    while (remains()) {
+        assert(!peekLine().empty());
+        auto id = source.of(peekLine().front());
         if (id == "define") {
-            it = parseDefine(it);
+            parseDefine();
         } else if (id == "declare") {
-            it = parseDeclare(it);
+            parseDeclare();
         } else if (id.starts_with("@")) {
-            it = parseGlobalVariable(it);
+            parseGlobalVariable();
         }
     }
 }
 
 
-auto Parser::parseDefine(iterator it) -> iterator {
-    auto define = LineParser{source, *it}.parseDefine();
-    ++it;
+void Parser::parseDefine() {
+    auto define = LineParser{source, nextLine()}.parseDefine();
     std::vector<std::unique_ptr<Inst>> insts;
-    while (it->front().type != TokenType::RBRACE) { // assume *it never overflows
-        insts.push_back(LineParser{source, *it}.parseInst());
-        auto segment = range(it->front(), it->back());
+    while (remains() && peekLine().front().type != TokenType::RBRACE) {
+        auto line = peekLine();
+        insts.push_back(LineParser{source, line}.parseInst());
+        auto segment = range(line.front(), line.back());
         Token token{.line = segment.line1, .column = segment.column1, .width = segment.column2 - segment.column1};
         std::string code(source.of(token));
         insts.back()->code = code;
-        ++it;
+        nextLine();
     }
-    ++it;
-    std::vector<std::unique_ptr<Inst>> bb;
-    auto inst = insts.begin();
-    while (inst != insts.end()) {
+    nextLine();
+    for (auto inst = insts.begin(); inst != insts.end(); ) {
+        std::vector<std::unique_ptr<Inst>> bb;
         assert((*inst)->kind() == Inst::Kind::LABEL);
         bb.push_back(std::move(*inst++));
         while (inst != insts.end() && (*inst)->kind() != Inst::Kind::TERMINATOR) {
@@ -43,21 +43,17 @@ auto Parser::parseDefine(iterator it) -> iterator {
         }
         assert(inst != insts.end());
         bb.push_back(std::move(*inst++));
-        std::vector<std::unique_ptr<Inst>> t; t.swap(bb); // suppressing use-after-move warning'
-        define->bbs.emplace_back(std::move(t));
+        define->bbs.emplace_back(std::move(bb));
     }
     entities.push_back(std::move(define));
-    return it;
 }
 
-auto Parser::parseDeclare(iterator it) -> iterator {
-    entities.push_back(LineParser{source, *it}.parseDeclare());
-    return ++it;
+void Parser::parseDeclare() {
+    entities.push_back(LineParser{source, nextLine()}.parseDeclare());
 }
 
-auto Parser::parseGlobalVariable(iterator it) -> iterator {
-    entities.push_back(LineParser{source, *it}.parseGlobalVariable());
-    return ++it;
+void Parser::parseGlobalVariable() {
+    entities.push_back(LineParser{source, nextLine()}.parseGlobalVariable());
 }
 
 Type parseType(std::string_view type) {
@@ -237,7 +233,7 @@ std::unique_ptr<FunctionDefine> LineParser::parseDefine() {
 }
 
 std::unique_ptr<FunctionDeclare> LineParser::parseDeclare() {
-    next(); // define
+    next(); // declare
     next(); // return type
     std::string name(source.of(expect(TokenType::IDENTIFIER, "identifier")));
     auto declare = std::make_unique<FunctionDeclare>();
